@@ -4,6 +4,9 @@ package thrones.game;
 
 import ch.aplu.jcardgame.*;
 import ch.aplu.jgamegrid.*;
+import thrones.game.bot.ConsiderationFactory;
+import thrones.game.bot.Decision;
+import thrones.game.bot.LegalBotPlayer;
 import thrones.game.utility.Logger;
 
 import java.awt.Color;
@@ -116,6 +119,9 @@ public class GameOfThrones extends CardGame {
     private List<List<List<String>>> initialCardStrings = new ArrayList<>();
     private List<List<List<String>>> initialHeartStrings = new ArrayList<>();
 
+    // Bot for each player slot, null if not LEGAL.
+    private LegalBotPlayer[] legalBots = new LegalBotPlayer[nbPlayers];
+
     private List<String> cardListFromKey(Properties properties, String key) {
         String initialCardString = properties.getProperty(key);
         if (initialCardString != null && !initialCardString.isEmpty()) {
@@ -132,6 +138,12 @@ public class GameOfThrones extends CardGame {
         for (int i = 0; i < nbPlayers; i++) {
             playerTypes[i] = PlayerType.fromStringToPlayerType(properties.getProperty("players." + i));
             playerMovementIndexes.add(0);
+
+            // Build bot only for LEGAL slots
+            if (playerTypes[i] == PlayerType.LEGAL) {
+                String csv = properties.getProperty("players." + i + ".considerations");
+                legalBots[i] = new LegalBotPlayer(ConsiderationFactory.fromCodes(csv));
+            }
         }
 
         for (int i = 0; i < NUMBER_OF_PLAYS; i++) {
@@ -636,16 +648,30 @@ public class GameOfThrones extends CardGame {
                     } else {
                         selectRandomPile();
                     }
+
+                    // Legal bot reviews the random card + pile and may override
+                    if (playerTypes[nextPlayer] == PlayerType.LEGAL && legalBots[nextPlayer] != null) {
+                        int ownPileIndex = nextPlayer % 2;
+                        Decision d = legalBots[nextPlayer].decideMove(
+                                selected.get(), selectedPileIndex, ownPileIndex, piles);
+                        if (d == Decision.PASS) {
+                            selected = Optional.empty();
+                            System.out.println(". Player" + nextPlayer + " Pass.");
+                            setStatusText("Pass.");
+                        }
+                    }
                 } else {
                     System.out.println(". Player" + nextPlayer + "Pass.");
                     setStatusText("Pass.");
                 }
             }
 
-            selected.get().setVerso(false);
-            selected.get().transfer(piles[selectedPileIndex], true); // transfer to pile (includes graphic effect)
-            updatePileRanks();
-            logger.logPlayerMovement(nextPlayer, selected.get(), selectedPileIndex);
+            if (selected.isPresent()) {
+                selected.get().setVerso(false);
+                selected.get().transfer(piles[selectedPileIndex], true); // transfer to pile (includes graphic effect)
+                updatePileRanks();
+                logger.logPlayerMovement(nextPlayer, selected.get(), selectedPileIndex);
+            }
 
             nextPlayer = (nextPlayer + 1) % nbPlayers;
             remainingTurns--;
