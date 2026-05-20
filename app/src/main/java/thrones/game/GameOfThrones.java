@@ -115,7 +115,6 @@ public class GameOfThrones extends CardGame {
     PlayerType[] playerTypes = { PlayerType.HUMAN, PlayerType.HUMAN, PlayerType.HUMAN, PlayerType.HUMAN };
     private int currentPlay = 0;
     private List<Integer> firstPlayers = new ArrayList<>();
-    private int NUMBER_OF_PLAYS = 2;
     private List<List<List<String>>> playerAutoMovements = new ArrayList<>();
     private List<Integer> playerMovementIndexes = new ArrayList<>();
     private List<List<List<String>>> initialCardStrings = new ArrayList<>();
@@ -141,12 +140,23 @@ public class GameOfThrones extends CardGame {
     private void initWithProperties(Properties properties) {
         isAuto = Boolean.parseBoolean(properties.getProperty("isAuto"));
         for (int i = 0; i < nbPlayers; i++) {
-            playerTypes[i] = PlayerType.fromStringToPlayerType(properties.getProperty("players." + i));
+            String playerValue = properties.getProperty("players." + i);
+            String typeStr = playerValue;
+            String inlineCsv = null;
+
+            if (playerValue != null && playerValue.contains("-")) {
+                int dash = playerValue.indexOf('-');
+                typeStr = playerValue.substring(0, dash);
+                inlineCsv = playerValue.substring(dash + 1);
+            }
+
+            playerTypes[i] = PlayerType.fromStringToPlayerType(typeStr);
             playerMovementIndexes.add(0);
 
             // Build Legal and Smart bots in slots
             if (playerTypes[i] == PlayerType.LEGAL) {
-                String csv = properties.getProperty("players." + i + ".considerations");
+                String csv = (inlineCsv != null) ? inlineCsv
+                        : properties.getProperty("players." + i + ".considerations");
                 legalBots[i] = new LegalBotPlayer(ConsiderationFactory.fromCodes(csv));
             }
             if (playerTypes[i] == PlayerType.SMART) {
@@ -154,7 +164,7 @@ public class GameOfThrones extends CardGame {
             }
         }
 
-        for (int i = 0; i < NUMBER_OF_PLAYS; i++) {
+        for (int i = 0; i < nbPlays; i++) {
             String firstPlayerString = properties.getProperty("plays." + i + ".firstPlayer");
             if (firstPlayerString != null && !firstPlayerString.isEmpty()) {
                 firstPlayers.add(Integer.parseInt(firstPlayerString));
@@ -163,7 +173,7 @@ public class GameOfThrones extends CardGame {
             }
         }
 
-        for (int i = 0; i < NUMBER_OF_PLAYS; i++) {
+        for (int i = 0; i < nbPlays; i++) {
             initialCardStrings.add(new ArrayList<>());
             playerAutoMovements.add(new ArrayList<>());
             initialHeartStrings.add(new ArrayList<>());
@@ -394,7 +404,6 @@ public class GameOfThrones extends CardGame {
     private Optional<Card> selected;
     private final int NON_SELECTION_VALUE = -1;
     private int selectedPileIndex = NON_SELECTION_VALUE;
-    private final int UNDEFINED_INDEX = -1;
     public static final int ATTACK_RANK_INDEX = 0;
     public static final int DEFENCE_RANK_INDEX = 1;
 
@@ -596,7 +605,7 @@ public class GameOfThrones extends CardGame {
             }
 
             if (selected.isEmpty()) {
-                pileIndex = i % 2;
+                pileIndex = (nextStartingPlayer + i) % 2;
                 if (playerTypes[playerIndex] == PlayerType.HUMAN) {
                     waitForCorrectSuit(playerIndex, true);
                 } else if (playerTypes[playerIndex] == PlayerType.SMART && smartBots[playerIndex] != null) {
@@ -633,8 +642,12 @@ public class GameOfThrones extends CardGame {
                         String cardString = components[0];
                         selectedPileIndex = Integer.parseInt(components[1]);
                         selected = Optional.ofNullable(getCardFromList(currentHand.getCardList(), cardString));
-                        setStatusText("Selected: " + canonical(selected.get()) + ". Player" + nextPlayer +
-                                " select a pile " + selectedPileIndex + " to play the card.");
+
+                        if (selected.isPresent()) {
+                            setStatusText("Selected: " + canonical(selected.get()) + ". Player" + nextPlayer +
+                                    " select a pile " + selectedPileIndex + " to play the card.");
+                        }
+
                         playerMovementIndexes.set(nextPlayer, playerMovementIndex + 1);
                         hasSelectedCard = true;
                     }
@@ -658,18 +671,6 @@ public class GameOfThrones extends CardGame {
                         setStatusText("Selected: " + canonical(selected.get()) + ". Player" + nextPlayer
                                 + " plays on pile " + selectedPileIndex + ".");
                     }
-
-                    // Legal bot reviews the random card + pile and may override
-                    if (playerTypes[nextPlayer] == PlayerType.LEGAL && legalBots[nextPlayer] != null) {
-                        int ownPileIndex = nextPlayer % 2;
-                        Decision d = legalBots[nextPlayer].decideMove(
-                                selected.get(), selectedPileIndex, ownPileIndex, piles);
-                        if (d == Decision.PASS) {
-                            selected = Optional.empty();
-                            System.out.println(". Player" + nextPlayer + " Pass.");
-                            setStatusText("Pass.");
-                        }
-                    }
                 } else {
                     if (playerTypes[nextPlayer] == PlayerType.HUMAN) {
                         waitForCorrectSuit(nextPlayer, false);
@@ -685,22 +686,23 @@ public class GameOfThrones extends CardGame {
                         } else {
                             selectRandomPile();
                         }
-
-                        // Legal bot reviews the random card + pile and may override
-                        if (playerTypes[nextPlayer] == PlayerType.LEGAL && legalBots[nextPlayer] != null) {
-                            int ownPileIndex = nextPlayer % 2;
-                            Decision d = legalBots[nextPlayer].decideMove(
-                                    selected.get(), selectedPileIndex, ownPileIndex, piles);
-                            if (d == Decision.PASS) {
-                                selected = Optional.empty();
-                                System.out.println(". Player" + nextPlayer + " Pass.");
-                                setStatusText("Pass.");
-                            }
-                        }
                     } else {
                         System.out.println(". Player" + nextPlayer + "Pass.");
                         setStatusText("Pass.");
                     }
+                }
+            }
+
+            // Legal bot reviews the chosen card and pile and may override to pass
+            if (playerTypes[nextPlayer] == PlayerType.LEGAL && legalBots[nextPlayer] != null
+                    && selected.isPresent()) {
+                int ownPileIndex = nextPlayer % 2;
+                Decision d = legalBots[nextPlayer].decideMove(
+                        selected.get(), selectedPileIndex, ownPileIndex, piles);
+                if (d == Decision.PASS) {
+                    selected = Optional.empty();
+                    System.out.println(". Player" + nextPlayer + " Pass.");
+                    setStatusText("Pass.");
                 }
             }
 
@@ -729,22 +731,22 @@ public class GameOfThrones extends CardGame {
         String character1Result;
 
         if (pileNorthRanks[ATTACK_RANK_INDEX] > pileSouthRanks[DEFENCE_RANK_INDEX]) {
-            scores[getPlayerIndex(nextStartingPlayer)] += pileSouthCharacterRank.getScoreValue();
-            scores[getPlayerIndex(nextStartingPlayer + 2)] += pileSouthCharacterRank.getScoreValue();
+            scores[0] += pileSouthCharacterRank.getScoreValue();
+            scores[2] += pileSouthCharacterRank.getScoreValue();
             character0Result = "Character 0 attack on character 1 succeeded.";
         } else {
-            scores[getPlayerIndex(nextStartingPlayer + 1)] += pileSouthCharacterRank.getScoreValue();
-            scores[getPlayerIndex(nextStartingPlayer + 3)] += pileSouthCharacterRank.getScoreValue();
+            scores[1] += pileSouthCharacterRank.getScoreValue();
+            scores[3] += pileSouthCharacterRank.getScoreValue();
             character0Result = "Character 0 attack on character 1 failed.";
         }
 
         if (pileSouthRanks[ATTACK_RANK_INDEX] > pileNorthRanks[DEFENCE_RANK_INDEX]) {
-            scores[getPlayerIndex(nextStartingPlayer + 1)] += pileNorthCharacterRank.getScoreValue();
-            scores[getPlayerIndex(nextStartingPlayer + 3)] += pileNorthCharacterRank.getScoreValue();
+            scores[1] += pileNorthCharacterRank.getScoreValue();
+            scores[3] += pileNorthCharacterRank.getScoreValue();
             character1Result = "Character 1 attack on character 0 succeeded.";
         } else {
-            scores[getPlayerIndex(nextStartingPlayer)] += pileNorthCharacterRank.getScoreValue();
-            scores[getPlayerIndex(nextStartingPlayer + 2)] += pileNorthCharacterRank.getScoreValue();
+            scores[0] += pileNorthCharacterRank.getScoreValue();
+            scores[2] += pileNorthCharacterRank.getScoreValue();
             character1Result = "Character 1 attack character 0 failed.";
         }
         updateScores();
@@ -782,11 +784,4 @@ public class GameOfThrones extends CardGame {
         delay(watchingTime);
     }
 
-    private int getWatchingTime() {
-        if (isAuto) {
-            return 100;
-        } else {
-            return 500;
-        }
-    }
 }

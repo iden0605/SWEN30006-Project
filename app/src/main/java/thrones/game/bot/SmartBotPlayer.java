@@ -245,7 +245,7 @@ public class SmartBotPlayer {
     }
 
     /**
-     * Runs a caclulator on a copy of the pile's card list with the candidate
+     * Runs a calculator on a copy of the pile's card list with the candidate
      * appended.
      */
     private int[] simulateNewRanks(Hand pile, Card candidate) {
