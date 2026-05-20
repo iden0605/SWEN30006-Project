@@ -658,6 +658,18 @@ public class GameOfThrones extends CardGame {
                         setStatusText("Selected: " + canonical(selected.get()) + ". Player" + nextPlayer
                                 + " plays on pile " + selectedPileIndex + ".");
                     }
+
+                    // Legal bot reviews the random card + pile and may override
+                    if (playerTypes[nextPlayer] == PlayerType.LEGAL && legalBots[nextPlayer] != null) {
+                        int ownPileIndex = nextPlayer % 2;
+                        Decision d = legalBots[nextPlayer].decideMove(
+                                selected.get(), selectedPileIndex, ownPileIndex, piles);
+                        if (d == Decision.PASS) {
+                            selected = Optional.empty();
+                            System.out.println(". Player" + nextPlayer + " Pass.");
+                            setStatusText("Pass.");
+                        }
+                    }
                 } else {
                     if (playerTypes[nextPlayer] == PlayerType.HUMAN) {
                         waitForCorrectSuit(nextPlayer, false);
