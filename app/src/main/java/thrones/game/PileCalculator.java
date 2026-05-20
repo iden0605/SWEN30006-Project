@@ -18,12 +18,17 @@ public class PileCalculator implements PileCalculationStrategy {
 
     @Override
     public int[] calculateRanks(Hand pile) {
-        int[] ranks = new int[] { 0, 0 };
         if (pile == null || pile.isEmpty()) {
+            return new int[] { 0, 0 };
+        }
+        return calculateRanks(pile.getCardList());
+    }
+
+    public int[] calculateRanks(List<Card> cards) {
+        int[] ranks = new int[] { 0, 0 };
+        if (cards == null || cards.isEmpty()) {
             return ranks;
         }
-
-        List<Card> cards = pile.getCardList();
 
         // The first card is always a heart
         Card characterCard = cards.get(0);

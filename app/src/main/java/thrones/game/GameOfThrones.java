@@ -7,6 +7,8 @@ import ch.aplu.jgamegrid.*;
 import thrones.game.bot.ConsiderationFactory;
 import thrones.game.bot.Decision;
 import thrones.game.bot.LegalBotPlayer;
+import thrones.game.bot.Move;
+import thrones.game.bot.SmartBotPlayer;
 import thrones.game.utility.Logger;
 
 import java.awt.Color;
@@ -119,8 +121,11 @@ public class GameOfThrones extends CardGame {
     private List<List<List<String>>> initialCardStrings = new ArrayList<>();
     private List<List<List<String>>> initialHeartStrings = new ArrayList<>();
 
-    // Bot for each player slot, null if not LEGAL.
+    // Bot for each player slot, null if not LEGAL
     private LegalBotPlayer[] legalBots = new LegalBotPlayer[nbPlayers];
+
+    // Smart bot per slot, null if not SMART
+    private SmartBotPlayer[] smartBots = new SmartBotPlayer[nbPlayers];
 
     private List<String> cardListFromKey(Properties properties, String key) {
         String initialCardString = properties.getProperty(key);
@@ -139,10 +144,13 @@ public class GameOfThrones extends CardGame {
             playerTypes[i] = PlayerType.fromStringToPlayerType(properties.getProperty("players." + i));
             playerMovementIndexes.add(0);
 
-            // Build bot only for LEGAL slots
+            // Build Legal and Smart bots in slots
             if (playerTypes[i] == PlayerType.LEGAL) {
                 String csv = properties.getProperty("players." + i + ".considerations");
                 legalBots[i] = new LegalBotPlayer(ConsiderationFactory.fromCodes(csv));
+            }
+            if (playerTypes[i] == PlayerType.SMART) {
+                smartBots[i] = new SmartBotPlayer(i % 2, random);
             }
         }
 
@@ -591,6 +599,8 @@ public class GameOfThrones extends CardGame {
                 pileIndex = i % 2;
                 if (playerTypes[playerIndex] == PlayerType.HUMAN) {
                     waitForCorrectSuit(playerIndex, true);
+                } else if (playerTypes[playerIndex] == PlayerType.SMART && smartBots[playerIndex] != null) {
+                    selected = Optional.of(smartBots[playerIndex].selectCharacter(hands[playerIndex]));
                 } else {
                     pickACorrectSuit(playerIndex, true);
                 }
@@ -634,19 +644,19 @@ public class GameOfThrones extends CardGame {
             if (!hasSelectedCard || selected.isEmpty()) {
                 nextPlayer = getPlayerIndex(nextPlayer);
                 setStatusText("Player" + nextPlayer + " select a non-Heart card to play.");
-                if (playerTypes[nextPlayer] == PlayerType.HUMAN) {
-                    waitForCorrectSuit(nextPlayer, false);
-                } else {
-                    pickACorrectSuit(nextPlayer, false);
-                }
 
-                if (selected.isPresent()) {
-                    setStatusText("Selected: " + canonical(selected.get()) + ". Player" + nextPlayer
-                            + " select a pile to play the card.");
-                    if (playerTypes[nextPlayer] == PlayerType.HUMAN) {
-                        waitForPileSelection();
+                // Smart bot picks both card and pile
+                if (playerTypes[nextPlayer] == PlayerType.SMART && smartBots[nextPlayer] != null) {
+                    Move m = smartBots[nextPlayer].selectMove(hands[nextPlayer], piles);
+                    if (m.isPass()) {
+                        selected = Optional.empty();
+                        System.out.println(". Player" + nextPlayer + " Pass.");
+                        setStatusText("Pass.");
                     } else {
-                        selectRandomPile();
+                        selected = Optional.of(m.getCard());
+                        selectedPileIndex = m.getPileIndex();
+                        setStatusText("Selected: " + canonical(selected.get()) + ". Player" + nextPlayer
+                                + " plays on pile " + selectedPileIndex + ".");
                     }
 
                     // Legal bot reviews the random card + pile and may override
@@ -661,8 +671,36 @@ public class GameOfThrones extends CardGame {
                         }
                     }
                 } else {
-                    System.out.println(". Player" + nextPlayer + "Pass.");
-                    setStatusText("Pass.");
+                    if (playerTypes[nextPlayer] == PlayerType.HUMAN) {
+                        waitForCorrectSuit(nextPlayer, false);
+                    } else {
+                        pickACorrectSuit(nextPlayer, false);
+                    }
+
+                    if (selected.isPresent()) {
+                        setStatusText("Selected: " + canonical(selected.get()) + ". Player" + nextPlayer
+                                + " select a pile to play the card.");
+                        if (playerTypes[nextPlayer] == PlayerType.HUMAN) {
+                            waitForPileSelection();
+                        } else {
+                            selectRandomPile();
+                        }
+
+                        // Legal bot reviews the random card + pile and may override
+                        if (playerTypes[nextPlayer] == PlayerType.LEGAL && legalBots[nextPlayer] != null) {
+                            int ownPileIndex = nextPlayer % 2;
+                            Decision d = legalBots[nextPlayer].decideMove(
+                                    selected.get(), selectedPileIndex, ownPileIndex, piles);
+                            if (d == Decision.PASS) {
+                                selected = Optional.empty();
+                                System.out.println(". Player" + nextPlayer + " Pass.");
+                                setStatusText("Pass.");
+                            }
+                        }
+                    } else {
+                        System.out.println(". Player" + nextPlayer + "Pass.");
+                        setStatusText("Pass.");
+                    }
                 }
             }
 
@@ -718,6 +756,12 @@ public class GameOfThrones extends CardGame {
     private void executeAPlay() {
         resetPile();
         resetIndexes();
+
+        // Clear smart bot flags at the start of each play
+        for (SmartBotPlayer s : smartBots) {
+            if (s != null)
+                s.resetForNewPlay();
+        }
 
         playHeartForCharacters();
         playTurns();
