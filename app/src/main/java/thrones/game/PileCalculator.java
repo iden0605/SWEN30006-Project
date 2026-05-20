@@ -36,8 +36,8 @@ public class PileCalculator implements PileCalculationStrategy {
         ranks[ATTACK] = characterValue;
         ranks[DEFENCE] = characterValue;
 
+        // Target of the most recent effect card, diamonds inherit it.
         int lastEffectTarget = NO_TARGET;
-        int suppressDoublingIfAxis = NO_TARGET;
 
         for (int i = 1; i < cards.size(); i++) {
             Card current = cards.get(i);
@@ -46,22 +46,8 @@ public class PileCalculator implements PileCalculationStrategy {
             int currentValue = ((Rank) current.getRank()).getScoreValue();
             int previousValue = ((Rank) previous.getRank()).getScoreValue();
 
-            // Get this card's axis
-            int currentAxis;
-            if (currentSuit.isAttack())
-                currentAxis = ATTACK;
-            else if (currentSuit.isDefence())
-                currentAxis = DEFENCE;
-            else
-                currentAxis = lastEffectTarget;
-
-            // Stop doubling if the previous diamond zeroed this card
-            boolean doubleBlocked = (suppressDoublingIfAxis != NO_TARGET && suppressDoublingIfAxis == currentAxis);
-
-            int effect = (!doubleBlocked && currentValue == previousValue) ? currentValue * 2 : currentValue;
-
-            // Reset suppression
-            suppressDoublingIfAxis = NO_TARGET;
+            // Equal rank doubling
+            int effect = (currentValue == previousValue) ? currentValue * 2 : currentValue;
 
             if (currentSuit.isAttack()) {
                 ranks[ATTACK] += effect;
@@ -77,11 +63,8 @@ public class PileCalculator implements PileCalculationStrategy {
                 ranks[lastEffectTarget] -= effect;
 
                 // Floor to zero
-                if (ranks[lastEffectTarget] <= 0) {
-                    suppressDoublingIfAxis = lastEffectTarget;
-                    if (ranks[lastEffectTarget] < 0) {
-                        ranks[lastEffectTarget] = 0;
-                    }
+                if (ranks[lastEffectTarget] < 0) {
+                    ranks[lastEffectTarget] = 0;
                 }
             }
         }

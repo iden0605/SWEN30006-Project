@@ -83,7 +83,7 @@ public class GameTest {
 
         Assert.assertTrue(logResult.contains("PileNORTH:7H,3C,2S,5D,3S"));
         Assert.assertTrue(logResult.contains("PileSOUTH:10H,12C,2C,10S,13D,12S"));
-        Assert.assertTrue(logResult.contains("Values:PileNORTH:10-7,PileSOUTH:32-10"));
+        Assert.assertTrue(logResult.contains("Values:PileNORTH:10-7,PileSOUTH:32-20"));
         Assert.assertTrue(logResult.contains("Score:3,23,3,23"));
     }
 }
