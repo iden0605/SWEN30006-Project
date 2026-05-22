@@ -8,4 +8,4 @@
 
  ## Documentation files
 - Link to Draw.io : https://app.diagrams.net/#G1BVWYMf6pt39tDre5Mqp2IJQipgTEY-Vp#%7B%22pageId%22%3A%22KRCQmE4dGvrjPAfybiek%22%7D
-- Link to Google doc : 
+- Link to Google doc : https://docs.google.com/document/d/153oycY4yHrhkKXyIFyI3zxOLeZuUR2ItS5ROYUbh5Dk/edit?tab=t.o46iujvcilzz
